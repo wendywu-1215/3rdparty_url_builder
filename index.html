@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Internal URL Builder</title>
+
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans TC", Arial; margin: 24px; }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    h1 { font-size: 22px; margin-bottom: 16px; }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    label { font-size: 13px; margin-bottom: 6px; display: block; }
+    label strong { font-weight: 700; }
+
+    select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      background: #fff;
+      box-sizing: border-box;
+    }
+
+    select:disabled {
+      background: #f3f3f3;
+      color: #999;
+      cursor: not-allowed;
+    }
+
+    textarea { min-height: 110px; resize: vertical; }
+
+    .row { margin-top: 14px; }
+
+    .btns {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      background: #fff;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    button:hover { background: #f6f6f6; }
+
+    .box {
+      border: 1px solid #eee;
+      border-radius: 12px;
+      padding: 12px;
+      background: #fafafa;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+      line-height: 1.4;
+      min-height: 72px;
+    }
+
+    .highlight-title {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 8px;
+      background: #fff3b0;
+    }
+
+    .highlight-box {
+      background: #fffbea;
+      border: 2px solid #ffd24d;
+    }
+
+    .highlight-btn {
+      border: 2px solid #ffd24d;
+      background: #fffbea;
+    }
+
+    .hint {
+      font-size: 12px;
+      opacity: 0.75;
+      margin-top: 6px;
+      line-height: 1.45;
+    }
+
+    .char-count {
+      font-size: 12px;
+      opacity: 0.75;
+      text-align: right;
+      margin-top: 4px;
+    }
+
+    @media (max-width: 860px) {
+      .grid, .two { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="wrap">
+  <h1>Internal URL Builder</h1>
+
+  <!-- Feature -->
+  <div class="row">
+    <label><strong>Feature</strong></label>
+    <div class="hint">Select feature and Demo / Production</div>
+    <select id="feature">
+      <option value="t2i-prod">Text to Image (Production)</option>
+      <option value="i2v-prod">Image to Video (Production)</option>
+      <option value="t2v-prod">Text to Video (Production)</option>
+      <option value="t2i-demo">Text to Image (Demo)</option>
+      <option value="i2v-demo">Image to Video (Demo)</option>
+      <option value="t2v-demo">Text to Video (Demo)</option>
+    </select>
+  </div>
+
+  <div class="row grid">
+    <div>
+      <label><strong>Model name</strong></label>
+      <div class="hint">Models are filtered by selected feature</div>
+      <select id="model">
+        <option value="">Select a model</option>
+      </select>
+    </div>
+
+    <div>
+      <label><strong>Ratio</strong></label>
+      <div class="hint">Disabled automatically for Image to Video</div>
+      <select id="ratio">
+        <option value="">Select ratio</option>
+        <option value="1:1">1:1</option>
+        <option value="2:3">2:3</option>
+        <option value="3:4">3:4</option>
+        <option value="9:16">9:16</option>
+        <option value="3:2">3:2</option>
+        <option value="4:3">4:3</option>
+        <option value="16:9">16:9</option>
+        <option value="21:9">21:9</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="row">
+    <label><strong>Prompt</strong></label>
+    <div class="hint">Please input the prompt (Max: 600 chars)</div>
+    <textarea id="prompt"></textarea>
+    <div class="char-count" id="charCount">0 / 600</div>
+  </div>
+
+  <div class="row two">
+    <div>
+      <label><strong><span class="highlight-title">Output URL</span></strong></label>
+      <div class="box highlight-box" id="output"></div>
+    </div>
+    <div>
+      <label><strong>Debug view</strong></label>
+      <div class="box" id="debug"></div>
+    </div>
+  </div>
+
+  <div class="btns">
+    <button id="copyUrl" class="highlight-btn">Copy URL</button>
+    <button id="open" class="highlight-btn">Open Page</button>
+    <button id="reset">Reset</button>
+  </div>
+
+  <div class="hint" id="status"></div>
+</div>
+
+<script>
+const MAX_PROMPT_LEN = 600;
+
+const BASE_URL = {
+  "t2i-prod": "https://yce.perfectcorp.com/ai-art-generator/result-photo",
+  "i2v-prod": "https://yce.perfectcorp.com/ai-video-generator/result-photo",
+  "t2v-prod": "https://yce.perfectcorp.com/products/ai-text-to-video-generator/result-photo",
+  "t2i-demo": "https://d3anovxlgi5hpq.cloudfront.net/ai-art-generator/result-photo",
+  "i2v-demo": "https://d3anovxlgi5hpq.cloudfront.net/ai-video-generator/result-photo",
+  "t2v-demo": "https://d3anovxlgi5hpq.cloudfront.net/ai-text-to-video-generator/result-photo"
+};
+
+const MODELS = {
+  i2v: [
+    { name: "Seedance 1.0 Pro", id: "seedance-1-0-pro-250528" },
+    { name: "Seedance 1.0 Lite", id: "seedance-1-0-lite-i2v-250428" },
+    { name: "Seedance 1.0 Pro Fast", id: "seedance-1-0-pro-fast-251015" },
+    { name: "KLING 2.5 Turbo", id: "kling-v2-5-turbo" },
+    { name: "KLING 2.1", id: "kling-v2-1" },
+    { name: "KLING 1.6", id: "kling-v1-6" },
+    { name: "PixVerse 5", id: "v5" },
+    { name: "PixVerse 4.5", id: "v4.5" },
+    { name: "PixVerse 4", id: "v4" },
+    { name: "PixVerse 3.5", id: "v3.5" },
+    { name: "Hailuo 02", id: "MiniMax-Hailuo-02" }
+  ],
+  t2v: [
+    { name: "KLING 2.5 Turbo", id: "kling-v2-5-turbo" },
+    { name: "KLING 2.1 Master", id: "kling-v2-1-master" },
+    { name: "KLING 2.0 Master", id: "kling-v2-master" },
+    { name: "KLING 1.6", id: "kling-v1-6" },
+    { name: "KLING 1.0", id: "kling-v1" },
+    { name: "Vidu Q2 Pro", id: "viduq2-pro" },
+    { name: "Vidu Q2 Turbo", id: "viduq2-turbo" },
+    { name: "Vidu Q1", id: "viduq1" },
+    { name: "Vidu 2.0", id: "vidu2.0" },
+    { name: "PixVerse 5", id: "v5" },
+    { name: "PixVerse 4.5", id: "v4.5" },
+    { name: "PixVerse 4", id: "v4" },
+    { name: "PixVerse 3.5", id: "v3.5" }
+  ],
+  t2i: [
+    { name: "Seedream 4.0", id: "seedream-4-0-250828" },
+    { name: "YouCam AI", id: "youcam-ai" },
+    { name: "GPT Image 1", id: "gpt-image-1" },
+    { name: "Imagen 4", id: "imagen-4.0-generate-001" },
+    { name: "Imagen 4 Ultra", id: "imagen-4.0-ultra-generate-001" },
+    { name: "Imagen 3", id: "imagen-3.0-generate-002" },
+    { name: "Flux 1.1 Pro", id: "flux-pro-1.1" },
+    { name: "Flux 1.1 Pro Ultra", id: "flux-pro-1.1-ultra" },
+    { name: "Flux Kontext Pro", id: "flux-kontext-pro" },
+    { name: "Nano Banana Pro", id: "gemini-3-pro-image-preview" },
+    { name: "Nano Banana", id: "gemini-2.5-flash-image-preview" }
+  ]
+};
+
+const els = {
+  feature: document.getElementById("feature"),
+  model: document.getElementById("model"),
+  ratio: document.getElementById("ratio"),
+  prompt: document.getElementById("prompt"),
+  charCount: document.getElementById("charCount"),
+  output: document.getElementById("output"),
+  debug: document.getElementById("debug"),
+  status: document.getElementById("status"),
+  copyUrlBtn: document.getElementById("copyUrl"),
+  openBtn: document.getElementById("open"),
+  resetBtn: document.getElementById("reset")
+};
+
+function setStatus(msg) {
+  els.status.textContent = msg || "";
+}
+
+function getFeatureType(v) {
+  if (v.startsWith("i2v")) return "i2v";
+  if (v.startsWith("t2v")) return "t2v";
+  return "t2i";
+}
+
+function updateModels() {
+  const type = getFeatureType(els.feature.value);
+  els.model.innerHTML = `<option value="">Select a model</option>`;
+  MODELS[type].forEach(m => {
+    const opt = document.createElement("option");
+    opt.value = m.id;
+    opt.textContent = m.name;
+    els.model.appendChild(opt);
+  });
+
+  els.ratio.disabled = (type === "i2v");
+  if (els.ratio.disabled) els.ratio.value = "";
+}
+
+function updateCharCount() {
+  const len = (els.prompt.value || "").length;
+  els.charCount.textContent = `${len} / ${MAX_PROMPT_LEN}`;
+}
+
+function build() {
+  const base = BASE_URL[els.feature.value];
+  const params = [];
+
+  const modelId = els.model.value || "";
+  const ratioVal = els.ratio.value || "";
+  const rawPrompt = (els.prompt.value || "").trim();
+
+  if (modelId) params.push("model=" + encodeURIComponent(modelId));
+  if (!els.ratio.disabled && ratioVal) params.push("ratio=" + ratioVal); // keep ":" unencoded
+  if (rawPrompt) params.push("prompt=" + encodeURIComponent(rawPrompt)); // spaces -> %20
+
+  const finalUrl = base + (params.length ? "?" + params.join("&") : "");
+  els.output.textContent = finalUrl;
+
+  els.debug.textContent =
+    `model: ${modelId || "(empty)"}\n` +
+    `ratio: ${els.ratio.disabled ? "(disabled)" : (ratioVal || "(empty)")}\n` +
+    `raw prompt: ${rawPrompt || "(empty)"}`;
+}
+
+async function copyText(text) {
+  const value = (text || "").toString();
+  if (!value) return false;
+
+  // Try modern clipboard only in secure contexts
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch (e) {}
+
+  // Fallback for file:// and older browsers
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = value;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-9999px";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* --- Events (includes Copy/Open/Reset) --- */
+els.feature.addEventListener("change", () => { updateModels(); updateCharCount(); build(); setStatus(""); });
+els.model.addEventListener("change", () => { build(); setStatus(""); });
+els.ratio.addEventListener("change", () => { build(); setStatus(""); });
+els.prompt.addEventListener("input", () => { updateCharCount(); build(); setStatus(""); });
+
+els.copyUrlBtn.addEventListener("click", async () => {
+  const ok = await copyText(els.output.textContent || "");
+  setStatus(ok ? "Copied URL." : "Copy failed. Please copy manually.");
+});
+
+els.openBtn.addEventListener("click", () => {
+  const url = els.output.textContent || "";
+  if (!url) { setStatus("No URL to open."); return; }
+  const win = window.open(url, "_blank");
+  if (!win) setStatus("Open blocked by browser. Please allow pop-ups for this page.");
+});
+
+els.resetBtn.addEventListener("click", () => {
+  els.model.value = "";
+  els.ratio.value = "";
+  els.prompt.value = "";
+  updateCharCount();
+  build();
+  setStatus("");
+});
+
+/* --- Init --- */
+updateModels();
+updateCharCount();
+build();
+</script>
+</body>
+</html>
